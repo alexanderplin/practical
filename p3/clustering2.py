@@ -55,6 +55,7 @@ global_median = np.median(total_plays)
 
 artist_id_to_genre = json.load(open("artist_id_to_genre_spot"))
 artist_id_to_popularity = json.load(open("artist_id_to_popularity_spot"))
+
 # artist_id_to_genre = json.load(open("artist_id_to_genre"))
 
 # key: genre, value = artist_index_list
@@ -166,7 +167,7 @@ for index_id, user_id, artist_id in test_reader:
     elif percentile_mean < 50:
         percentile_mean = 50-((50-percentile_mean) * (10/40))
     # get the value of the percentile based on user play percentile average
-    unknown_artist_plays_prediction = global_median if flag else artist_percentiles[artist_id][percentile_mean]
+    unknown_artist_plays_prediction = global_median if flag else user_percentiles[user_id][percentile_mean]
 
     final_result += [[int(index_id), unknown_artist_plays_prediction]]
 np.savetxt('results_valid_cluster.csv', final_result, fmt=['%d','%f'], delimiter=',', header='Id,plays', comments='')

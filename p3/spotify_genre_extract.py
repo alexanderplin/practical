@@ -26,8 +26,15 @@ for idx, (artist_id,artist_name) in enumerate(artist_id_to_genre_reader):
         continue
     # artist_id_to_genre[artist_id] = result['artists']['items'][0]['genres']
     artist_id_to_popularity[artist_id] = result['artists']['items'][0]['popularity']
-    break
+
+for key in artist_id_to_genre.keys():
+    if artist_id_to_popularity.get(key,None) == None:
+        print "missing id: ",key
+        result = sp.search(artist_id_to_name[key],type='artist')['artists']['items'][0]['popularity']
+        print result
+        artist_id_to_popularity[key] = result
+
 # result = sp.search(artist_id_to_name['e664d1cd-23ab-48d5-b8fa-e98485daa5be'],type='artist')
 # artist_id_to_popularity['e664d1cd-23ab-48d5-b8fa-e98485daa5be'] = result['artists']['items'][0]['popularity']
 
-json.dump(artist_id_to_genre,open("artist_id_to_popularity_spot",'w'))
+json.dump(artist_id_to_popularity,open("artist_id_to_popularity_spot",'w'))
