@@ -12,6 +12,9 @@ from sklearn.metrics import silhouette_score
 from scipy import stats
 import numpy as np
 
+testing_set = 'train_test_no_y.csv'
+training_set = 'train_train.csv'
+
 artist_index_to_id_reader = csv.reader(open('col_labels_index.csv'))
 next(artist_index_to_id_reader, None)
 # maps artist_index to id
@@ -23,7 +26,7 @@ for row in artist_index_to_id_reader:
    artist_index_to_id[int(v)] = k
    artist_id_to_index[k] = int(v)
 
-user_artists_reader = csv.reader(open('train_train.csv'))
+user_artists_reader = csv.reader(open(training_set))
 next(user_artists_reader, None)
 # maps user_id to list of artist_ids
 user_artists = defaultdict(list)
@@ -104,20 +107,23 @@ mat = sp.dok_matrix((genre_count,len_artists), dtype=np.int8)
 for genre_id, artist_ids in genre_matrix.items():
     mat[genre_id,artist_ids] = 1
 data = mat.transpose().tocsr()
-# best number of clusters to consider
-# sill_scores = []
-# for num_clusters in range(25,40):
-#     # clustering
-#     K = KMeans(n_clusters=num_clusters)
-#     K.fit(data)
-#     sill_scores += [silhouette_score(data, K.labels_)]
-# num_clusters = np.argmax(sill_scores)+25
-# print "Best # Cluster: ",num_clusters
-K = KMeans(n_clusters = 5)
+
+
+#best number of clusters to consider
+sill_scores = []
+for num_clusters in range(25,40):
+    # clustering
+    K = MiniBatchKMeans(n_clusters=num_clusters)
+    K.fit(data)
+    sill_scores += [silhouette_score(data, K.labels_)]
+num_clusters = np.argmax(sill_scores)+25
+print "Best # Cluster: ",num_clusters
+
+K = KMeans(n_clusters = num_clusters)
 K.fit(data)
 
 # iterate through test and make predictions
-test_reader = csv.reader(open('train_test_no_y.csv'))
+test_reader = csv.reader(open(testing_set))
 next(test_reader, None)
 final_result = []
 for index_id, user_id, artist_id in test_reader:
@@ -163,9 +169,9 @@ for index_id, user_id, artist_id in test_reader:
     else:
         percentile_mean = int(np.round(np.average(percentiles,weights = popularity)))
     if percentile_mean > 50:
-        percentile_mean = ((percentile_mean-50) * (10/40)) + 50
+        percentile_mean = ((percentile_mean-50) * (20/40)) + 50
     elif percentile_mean < 50:
-        percentile_mean = 50-((50-percentile_mean) * (10/40))
+        percentile_mean = 50-((50-percentile_mean) * (20/40))
     # get the value of the percentile based on user play percentile average
     unknown_artist_plays_prediction = global_median if flag else user_percentiles[user_id][percentile_mean]
 
