@@ -12,8 +12,19 @@ from sklearn.metrics import silhouette_score
 from scipy import stats
 import numpy as np
 
+
+######### READ THIS ################
+In oder to predict change the bottom line to:
+
+testing_set = 'test.csv'
+training_set = 'train.csv'
+
+
+# using this for cv
 testing_set = 'train_test_no_y.csv'
 training_set = 'train_train.csv'
+####################################
+
 
 artist_index_to_id_reader = csv.reader(open('col_labels_index.csv'))
 next(artist_index_to_id_reader, None)
