@@ -27,12 +27,11 @@ for idx, (artist_id,artist_name) in enumerate(artist_id_to_genre_reader):
     # artist_id_to_genre[artist_id] = result['artists']['items'][0]['genres']
     artist_id_to_popularity[artist_id] = result['artists']['items'][0]['popularity']
 
+# fill missing keys
 for key in artist_id_to_genre.keys():
     if artist_id_to_popularity.get(key,None) == None:
         print "missing id: ",key
-        result = sp.search(artist_id_to_name[key],type='artist')['artists']['items'][0]['popularity']
-        print result
-        artist_id_to_popularity[key] = result
+        artist_id_to_popularity[key] = 50
 
 # result = sp.search(artist_id_to_name['e664d1cd-23ab-48d5-b8fa-e98485daa5be'],type='artist')
 # artist_id_to_popularity['e664d1cd-23ab-48d5-b8fa-e98485daa5be'] = result['artists']['items'][0]['popularity']
