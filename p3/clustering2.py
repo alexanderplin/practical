@@ -168,12 +168,18 @@ for index_id, user_id, artist_id in test_reader:
     # average percentile of plays of artists in current cluster
     else:
         percentile_mean = int(np.round(np.average(percentiles,weights = popularity)))
+
+    # need some metric to penalize (arbitrary)
     if percentile_mean > 50:
-        percentile_mean = ((percentile_mean-50) * (20/40)) + 50
+        percentile_mean = 50 + int(np.round(percentile_mean/100.0))
     elif percentile_mean < 50:
-        percentile_mean = 50-((50-percentile_mean) * (20/40))
+        percentile_mean = 50- int(np.round(percentile_mean/100.0))
+
     # get the value of the percentile based on user play percentile average
     unknown_artist_plays_prediction = global_median if flag else user_percentiles[user_id][percentile_mean]
+
+    # get the value of the percentile based on user play percentile average (based on artist) (way worse)
+    # unknown_artist_plays_prediction = global_median if flag else artist_percentiles[artist_id][percentile_mean]
 
     final_result += [[int(index_id), unknown_artist_plays_prediction]]
 np.savetxt('results_valid_cluster.csv', final_result, fmt=['%d','%f'], delimiter=',', header='Id,plays', comments='')

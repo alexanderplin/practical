@@ -8,6 +8,9 @@ import numpy as np
 # spotify tags: 215.20608497723825
 # musicbrainz tags: ???
 
+
+# 152.08545900739867
+
 predictions_file = "results_valid_cluster.csv"
 validation_file = "train_test.csv"
 
