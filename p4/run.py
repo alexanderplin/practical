@@ -17,23 +17,34 @@ class Learner(object):
         self.last_action = None
         self.last_reward = None
         self.epsilon = None
-        self.alpha = None
+        self.eta = None
         self.Q = None
         self.top_bin = None
         self.dist_bin = None
+        self.gravity = None
+        self.first = True
+        self.counter = 0
+        self.heurstics = 0
+        self.last = None
 
     def reset(self):
         self.last_state  = None
         self.last_action = None
         self.last_reward = None
+        self.first = True
+        self.gravity = None
+        self.counter = 0
+        self.heurstics = 0
+        self.last = None
 
     def to_tuple(self, state):
         '''
         Takes state from dictionary representation to tuple representation so that
         it can be hashed in our Q dictionary.
-        returns new_state = (D, TD)
+        returns new_state = (D, TD, G)
             D = binned distance from monkey to tree
             TD = binned difference between top of tree and top of monkey
+            G = gravity
         '''
         new_state = []
 
@@ -42,6 +53,8 @@ class Learner(object):
         top_diff = state['tree']['top'] - state['monkey']['top']
         new_state.append(int(top_diff / self.top_bin))
 
+        new_state.append(int(self.gravity))
+
         return tuple(new_state)
 
     def action_callback(self, state):
@@ -49,33 +62,39 @@ class Learner(object):
         Implement this function to learn things and take actions.
         Return 0 if you don't want to jump and 1 if you do.
         '''
+        # Counting total number of actions in this epoch
+        self.counter += 1
 
         ## Q dictionary update
         # self.last_state = s, self.last_action = a, self.last_reward = r, state = s'
         if self.last_state is not None:
+
+            # Infer gravity: if monkey moves much more than velocity suggests, then gravity is higher
+            if self.first == True:
+                self.gravity = state['monkey']['top'] - self.last_state['monkey']['top'] - state['monkey']['vel']
+                self.first = False
+
             # Convert to tuples
             last_state = self.to_tuple(self.last_state)
             current_state = self.to_tuple(state)
 
             # Update Q values
             Q_sa = self.Q[(last_state, self.last_action)]
-            Q_sa = Q_sa + self.alpha*(self.last_reward + self.gamma*max(self.Q[(current_state, True)], self.Q[(current_state, False)]) - Q_sa)
+            Q_sa = Q_sa - self.eta*(Q_sa - (self.last_reward + self.gamma*max(self.Q[(current_state, True)], self.Q[(current_state, False)])))
 
-            # Infer gravity: If the (post-binned) state is the same after you jump, likely means that you both jump slowly and fall slowly. Therefore, the monkey should NOT jump, since it's still falling slowly (unless it hits this threshold), and if it jumps slowly, then it might double jump and go very high and hit something.
-            falling_threshold = 10
-            if last_state == current_state:
-                if state['monkey']['bot'] - state['tree']['bot'] >= falling_threshold:
-                    self.last_action = False
-                    return self.last_action
-
-            # Beyond inferring gravity, some heurstics: if monkey is very close to the top, always swing; if monkey is very close to the bottom, always jump (also skewed towards swinging)
+            # Some heurstics: if monkey is very close to the top, always swing; if monkey is very close to the bottom, always jump (also skewed towards swinging)
             if state['tree']['top'] - state['monkey']['top'] <= 75:
+                self.heurstics += 1
+                self.last = 'heurstic'
                 self.last_action = False
                 return self.last_action
             if state['monkey']['bot'] - state['tree']['bot'] <= 10:
+                self.heurstics += 1
+                self.last = 'heurstic'
                 self.last_action = True
                 return self.last_action
-            
+
+            self.last = 'not heurstic'
 
             ## Select best action based on max_a' Q(s', a') with greedy epsilon
             a_ = True
@@ -83,29 +102,17 @@ class Learner(object):
                 best_a = a_
             elif self.Q[(current_state, a_)] < self.Q[(current_state, not(a_))]:
                 best_a = not(a_)
-            else: # Tiebreak towards not jumping
-                best_a = False
+            else: # Tiebreak randomly
+                best_a = np.random.rand() >= 0.5
 
             if np.random.rand() >= self.epsilon:
                 next_action = best_a
             else:
                 next_action = not(best_a)
 
-            ## Calculate probability based on Boltzmann distribution (softmax action selection)
-            # Unsure how to determine annealing schedule ?? Didn't seem that much different than tweaking greedy epsilon
-            # action_probs = []
-            # for a_ in [False, True]:
-            #     action_probs[a_] = np.exp(self.Q[(current_state, a_)]/self.temp)
-            # action_probs = np.true_divide(action_probs, np.sum(action_probs))
-            # print action_probs
-            # if np.random.rand() <= action_probs[False]:
-            #     next_action = False
-            # else:
-            #     next_action = True
-
-        # If have not yet seen a state, choose to not jump
+        # If have not yet seen a state, randomly choose
         else: 
-            next_action = False
+            next_action = np.random.rand() >= 0.5
 
         # Update last_action to the selected a'
         self.last_action = next_action
@@ -125,14 +132,18 @@ def run_games(learner, hist, iters = 100, t_len = 100):
     Driver function to simulate learning by having the agent play a sequence of games.
     '''
 
-    # Initalize dictionary for storing Q values (default = random) and params
+    # Initalize dictionary for storing Q values and params
     Q = {}
+    # # Q-values initialized to bias towards not jumping in low gravity and jumping in high gravity
+    # for i in range(-100, 100):
+    #     for j in range(-100, 100):
+    #         Q[(i, j, 1), True] = -0.02
+    #         Q[(i, j, 4), True] = -0.05
     learner.Q = defaultdict(lambda: np.random.rand(), Q)
-    learner.alpha = 0.2
+    learner.eta = 0.2
     learner.gamma = 1
-    learner.top_bin = 30
+    learner.top_bin = 20
     learner.dist_bin = 30
-    learner.epsilon = 0.1
 
     for ii in range(iters):
         # Make a new monkey object.
@@ -142,36 +153,39 @@ def run_games(learner, hist, iters = 100, t_len = 100):
                              action_callback=learner.action_callback,
                              reward_callback=learner.reward_callback)
 
-        base_epsilon = 0.1
-        learner.epsilon = base_epsilon * (1/float(ii + 1))
+        base_epsilon = 0.05
+        learner.epsilon = base_epsilon * (1/float(ii/10.0 + 1))
 
         # Loop until you hit something.
         while swing.game_loop():
             pass
         
-        print ii, swing.score
+        print 'Iter {}: {} [{}] {}/{} last: {}'.format(ii, swing.score, learner.gravity, learner.heurstics, learner.counter, learner.last) 
 
         # Save score history.
         hist.append(swing.score)
 
         # Reset the state of the learner.
         learner.reset()
+
+    print 'Mean:', np.mean(hist)
+    print 'Max:', np.max(hist)
         
     return
 
 
 if __name__ == '__main__':
 
-	# Select agent.
-	agent = Learner()
+    # Select agent.
+    agent = Learner()
 
-	# Empty list to save history.
-	hist = []
+    # Empty list to save history.
+    hist = []
 
-	# Run games. 
-	run_games(agent, hist, iters = 100, t_len = 1)
+    # Run games. 
+    run_games(agent, hist, iters = 100, t_len = 10)
 
-	# Save history. 
-	np.savetxt('hist.csv', np.array(hist), fmt = '%u')
+    # Save history. 
+    np.savetxt('hist.csv', np.array(hist), fmt = '%u')
 
 
