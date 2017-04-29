@@ -53,7 +53,7 @@ class Learner(object):
 
         top_diff = state['tree']['top'] - state['monkey']['top']
         new_state.append(int(top_diff / self.top_bin))
-        new_state.append(state['monkey']['vel']/100)
+        new_state.append(state['monkey']['vel']/self.vel_bin)
 
         return tuple(new_state)
 
@@ -75,9 +75,9 @@ class Learner(object):
             next_action = True if self.Q[current_state,True] > self.Q[current_state,False] else False
 
             # decrease epsilon by a proportion of the previous # of times that action was done
-            if self.C[(current_state, next_action)] > 0 and self.C[(last_state, last_state)] > 0:
+            if self.C[(current_state, next_action)] > 0:
                 epsilon = self.epsilon/(self.C[(current_state, next_action)])
-                eta=self.eta/(self.C[(last_state, last_state)])
+                eta=self.eta/(self.C[(last_state, last_state)]+1)
             else:
                 epsilon=self.epsilon
                 eta=self.eta
@@ -111,11 +111,11 @@ class Learner(object):
         self.last_reward = reward
 
 
-def run_games(learner, hist, iters = 100, t_len = 100):
+def run_games(learner, hist, top_bin_length, bot_bin_length, gamma, vel_bin, iters = 100, t_len = 100):
     '''
     Driver function to simulate learning by having the agent play a sequence of games.
     '''
-
+    learner.vel_bin = vel_bin
     # Initalize dictionary for storing Q values and params
     Q = {}
     # # Q-values initialized to bias towards not jumping in low gravity and jumping in high gravity
@@ -125,9 +125,9 @@ def run_games(learner, hist, iters = 100, t_len = 100):
     #         Q[(i, j, 4), True] = -0.05
     learner.Q = defaultdict(int)
     learner.C = defaultdict(int)
-    learner.top_bin = 100
-    learner.dist_bin = 100
-    learner.gamma = 0.25 # Discount factor
+    learner.top_bin = top_bin_length
+    learner.dist_bin = bot_bin_length
+    learner.gamma = gamma # Discount factor
     learner.epsilon = 0.001 # This percent of the time, choose a random action.
     learner.eta= 1 # learning rate
 
@@ -143,7 +143,7 @@ def run_games(learner, hist, iters = 100, t_len = 100):
         while swing.game_loop():
             pass
 
-        print 'Iter {}: {} [{}] {}/{} last: {}'.format(ii, swing.score, learner.gravity, learner.heurstics, learner.counter, learner.last)
+        # print 'Iter {}: {} [{}] {}/{} last: {}'.format(ii, swing.score, learner.gravity, learner.heurstics, learner.counter, learner.last)
 
         # Save score history.
         hist.append(swing.score)
@@ -154,7 +154,7 @@ def run_games(learner, hist, iters = 100, t_len = 100):
     print 'Mean:', np.mean(hist)
     print 'Max:', np.max(hist)
 
-    return
+    return np.mean(hist)
 
 
 if __name__ == '__main__':
@@ -166,7 +166,17 @@ if __name__ == '__main__':
     hist = []
 
     # Run games.
-    run_games(agent, hist, iters = 500, t_len = 0)
+    # top_bin_length_results = [[run_games(agent, hist, top_bin_length, 25, 0.25, iters = 50, t_len = 0) for top_bin_length in range(10,150,10)] for _ in range(0,5)]
+    # print np.mean(np.array(top_bin_length_results), axis=0)
+
+    # vert_bin_length_results = [[run_games(agent, hist, 110, vert_bin_length, 0.25, iters = 50, t_len = 0) for vert_bin_length in range(10,150,10)] for _ in range(0,5)]
+    # print np.mean(np.array(vert_bin_length_results), axis=0)
+
+    # gamma_results = [[run_games(agent, hist, 110, 130, gamma, iters = 50, t_len = 0) for gamma in [x/100.0 for x in range(0,201,5)]] for _ in range(0,5)]
+    # print np.mean(np.array(gamma_results), axis=0)
+
+    vel_bin_results = [[run_games(agent, hist, 110, 130, 0.25, vel_bin, iters = 50, t_len = 0) for vel_bin in range(1,101,10)] for _ in range(0,5)]
+    print np.mean(np.array(vel_bin_results), axis=0)
 
     # Save history.
     np.savetxt('hist.csv', np.array(hist), fmt = '%u')
