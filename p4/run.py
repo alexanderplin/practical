@@ -19,6 +19,7 @@ class Learner(object):
         self.epsilon = None
         self.eta = None
         self.Q = None
+        self.C = None
         self.top_bin = None
         self.dist_bin = None
         self.gravity = None
@@ -52,8 +53,7 @@ class Learner(object):
 
         top_diff = state['tree']['top'] - state['monkey']['top']
         new_state.append(int(top_diff / self.top_bin))
-
-        new_state.append(int(self.gravity))
+        new_state.append(state['monkey']['vel']/100)
 
         return tuple(new_state)
 
@@ -64,61 +64,45 @@ class Learner(object):
         '''
         # Counting total number of actions in this epoch
         self.counter += 1
-
         ## Q dictionary update
         # self.last_state = s, self.last_action = a, self.last_reward = r, state = s'
+        current_state = self.to_tuple(state)
         if self.last_state is not None:
-
-            # Infer gravity: if monkey moves much more than velocity suggests, then gravity is higher
-            if self.first == True:
-                self.gravity = state['monkey']['top'] - self.last_state['monkey']['top'] - state['monkey']['vel']
-                self.first = False
 
             # Convert to tuples
             last_state = self.to_tuple(self.last_state)
-            current_state = self.to_tuple(state)
+
+            next_action = True if self.Q[current_state,True] > self.Q[current_state,False] else False
+
+            # decrease epsilon by a proportion of the previous # of times that action was done
+            if self.C[(current_state, next_action)] > 0 and self.C[(last_state, last_state)] > 0:
+                epsilon = self.epsilon/(self.C[(current_state, next_action)])
+                eta=self.eta/(self.C[(last_state, last_state)])
+            else:
+                epsilon=self.epsilon
+                eta=self.eta
+
+            if (np.random.uniform() < epsilon):
+                if np.random.uniform() >= 0.95:
+                    next_action=True
+                else:
+                    next_action=False
 
             # Update Q values
-            Q_sa = self.Q[(last_state, self.last_action)]
-            Q_sa = Q_sa - self.eta*(Q_sa - (self.last_reward + self.gamma*max(self.Q[(current_state, True)], self.Q[(current_state, False)])))
-
-            # Some heurstics: if monkey is very close to the top, always swing; if monkey is very close to the bottom, always jump (also skewed towards swinging)
-            if state['tree']['top'] - state['monkey']['top'] <= 75:
-                self.heurstics += 1
-                self.last = 'heurstic'
-                self.last_action = False
-                return self.last_action
-            if state['monkey']['bot'] - state['tree']['bot'] <= 10:
-                self.heurstics += 1
-                self.last = 'heurstic'
-                self.last_action = True
-                return self.last_action
-
-            self.last = 'not heurstic'
-
-            ## Select best action based on max_a' Q(s', a') with greedy epsilon
-            a_ = True
-            if self.Q[(current_state, a_)] > self.Q[(current_state, not(a_))]:
-                best_a = a_
-            elif self.Q[(current_state, a_)] < self.Q[(current_state, not(a_))]:
-                best_a = not(a_)
-            else: # Tiebreak randomly
-                best_a = np.random.rand() >= 0.5
-
-            if np.random.rand() >= self.epsilon:
-                next_action = best_a
-            else:
-                next_action = not(best_a)
+            self.Q[(last_state, self.last_action)] -= eta*(self.Q[(last_state, self.last_action)]-self.last_reward-self.gamma*max(self.Q[(current_state, True)], self.Q[(current_state, False)]))
 
         # If have not yet seen a state, randomly choose
-        else: 
-            next_action = np.random.rand() >= 0.5
+        else:
+            if np.random.uniform() >= 0.95:
+                next_action=True
+            else:
+                next_action=False
 
         # Update last_action to the selected a'
         self.last_action = next_action
         # Update last_state to the current state s'
         self.last_state  = state
-
+        self.C[(current_state,next_action)] += 1
         return self.last_action
 
     def reward_callback(self, reward):
@@ -139,11 +123,13 @@ def run_games(learner, hist, iters = 100, t_len = 100):
     #     for j in range(-100, 100):
     #         Q[(i, j, 1), True] = -0.02
     #         Q[(i, j, 4), True] = -0.05
-    learner.Q = defaultdict(lambda: np.random.rand(), Q)
-    learner.eta = 0.2
-    learner.gamma = 1
-    learner.top_bin = 20
-    learner.dist_bin = 30
+    learner.Q = defaultdict(int)
+    learner.C = defaultdict(int)
+    learner.top_bin = 100
+    learner.dist_bin = 100
+    learner.gamma = 0.25 # Discount factor
+    learner.epsilon = 0.001 # This percent of the time, choose a random action.
+    learner.eta= 1 # learning rate
 
     for ii in range(iters):
         # Make a new monkey object.
@@ -153,14 +139,11 @@ def run_games(learner, hist, iters = 100, t_len = 100):
                              action_callback=learner.action_callback,
                              reward_callback=learner.reward_callback)
 
-        base_epsilon = 0.05
-        learner.epsilon = base_epsilon * (1/float(ii/10.0 + 1))
-
         # Loop until you hit something.
         while swing.game_loop():
             pass
-        
-        print 'Iter {}: {} [{}] {}/{} last: {}'.format(ii, swing.score, learner.gravity, learner.heurstics, learner.counter, learner.last) 
+
+        print 'Iter {}: {} [{}] {}/{} last: {}'.format(ii, swing.score, learner.gravity, learner.heurstics, learner.counter, learner.last)
 
         # Save score history.
         hist.append(swing.score)
@@ -170,7 +153,7 @@ def run_games(learner, hist, iters = 100, t_len = 100):
 
     print 'Mean:', np.mean(hist)
     print 'Max:', np.max(hist)
-        
+
     return
 
 
@@ -182,10 +165,8 @@ if __name__ == '__main__':
     # Empty list to save history.
     hist = []
 
-    # Run games. 
-    run_games(agent, hist, iters = 100, t_len = 10)
+    # Run games.
+    run_games(agent, hist, iters = 500, t_len = 0)
 
-    # Save history. 
+    # Save history.
     np.savetxt('hist.csv', np.array(hist), fmt = '%u')
-
-
